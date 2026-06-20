@@ -1,5 +1,6 @@
 import request from 'supertest' ; 
 import app from '../../src/app' ;
+import bcrypt from 'bcrypt';
 
 import pool from '../../src/config/db.js';
 
@@ -14,8 +15,9 @@ afterEach ( async () =>{
 });
 
 afterAll(async () => {
-  await pool.end();
-}, 30000);
+
+await new Promise(resolve => setTimeout(resolve, 500));
+});
 
 test('Post /auth/register - should register a new user and return tokens' , async ()=>{
 
@@ -64,7 +66,57 @@ await pool.query(
     expect(res.body.message).toBe('User already exists');
 
 
-})
+});
 
 
-})
+
+describe('POST /auth/login' , ()=>{
+
+    test('should login user with valid credentials and return tokens' , async()=>{
+    const password = 'Password123';
+    const hashPassword = await bcrypt.hash(password , 10);
+    await pool.query('insert into users (name , email , password , role) values ($1 , $2 , $3 , $4)' ,
+        ['Test User' , 'test@example.com' , hashPassword , 'USER']) ;
+
+
+
+    const userData = {
+        email : 'test@example.com' , 
+        password : 'Password123'
+    }
+
+    const res = await request(app).post('/auth/login')
+    .send(userData);
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body).toHaveProperty('token');
+    //expect(res.body).toHaveProperty('refreshToken');
+    expect(res.body.user.email).toBe('test@example.com');
+
+
+});
+
+test('POST /auth/login - should return 400 if password is incorrect' , async()=>{
+
+    const password = 'Password123';
+    const hashPassword = await bcrypt.hash(password , 10);
+    await pool.query('insert into users (name , email , password , role) values ($1 , $2 , $3 ,$4) ' , 
+        ['Test User' , 'test@example.com' , hashPassword , 'USER'] 
+    );
+
+    const userData = {
+        email : 'test@example.com',
+        password : 'WrongPassword'
+    }
+    const res = await request(app).post('/auth/login')
+    .send(userData);
+
+    expect(res.statusCode).toBe(400);
+    expect(res.body.message).toBe('Password must be at least 6 characters long and contain at least one uppercase letter, one lowercase letter, and one number');
+
+
+});
+
+});
+
+});
